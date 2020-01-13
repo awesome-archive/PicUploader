@@ -8,12 +8,10 @@
 	
 	/*
 	 * 关于$argv与$argc变量，这两个变量是php作为脚本执行时，获取输入参数的变量
-	 * 比如 php test.php aa bb，那么在test.php里打印$argv变量就是一个数组，包含3个元素test.php, aa, bb，而$argc就是$argv的元素个数，相当于count($argc)，当然也可用$_SERVER['argv']，$_SERVER['argc']表示。
+	 * 比如执行： php test.php aa bb，那么在test.php里打印$argv变量就是一个数组，包含3个元素test.php, aa, bb，而$argc就是$argv的元素个数，相当于count($argc)，当然也可用$_SERVER['argv']，$_SERVER['argc']表示。
 	 */
 	
-	/*header('Content-Type: application/json; charset=UTF-8');
-    echo '{"code":"success","data":{"filename":"20190418194552.png","url":"https://ws2.sinaimg.cn/large/6db312f1gy1g270z0i9qtj207205m3yv.jpg"}}';exit;*/
-	error_reporting(E_ALL ^E_NOTICE);
+	error_reporting(0);
 	
 	use uploader\Common;
 	use settings\SettingController;
@@ -24,9 +22,10 @@
 	require 'common/EasyImage.php';
 	
 	define('APP_PATH', strtr(__DIR__, '\\', '/'));
-
+	
 	require APP_PATH . '/thirdpart/ufile-phpsdk/v1/ucloud/proxy.php';
 	require APP_PATH . '/thirdpart/eSDK_Storage_OBS_V3.1.3_PHP/obs-autoloader.php';
+	//金山云的define数据
 	//是否使用VHOST
 	define("KS3_API_VHOST",FALSE);
 	//是否开启日志(写入日志文件)
@@ -40,7 +39,7 @@
 	//是否开启curl debug模式
 	define("KS3_API_DEBUG_MODE",FALSE);
 	require APP_PATH . '/thirdpart/ks3-php-sdk/Ks3Client.class.php';
-
+	
 	//autoload class
 	spl_autoload_register(function ($class_name) {
 		require_once APP_PATH . '/' . str_replace('\\', '/', $class_name) . '.php';
@@ -101,6 +100,10 @@
 	}else if(isset($argv[1]) && $argv[1]=='--type=alfred'){
 		$alfred = true;
 		$imgPath = (new Common())->getImageFromClipboard();
+		if(!is_file($imgPath)){
+			(new Common())->sendNotification('no_image');
+			exit();
+		}
 		$argv = [];
 		if(is_file($imgPath)){
 			$argv = [$imgPath];
@@ -117,7 +120,18 @@
 			exit('未检测到图片');
 		}
 	}
+	
+	//提示没有图片可上传
+	if(empty($argv)){
+		(new Common())->sendNotification('no_image');
+	}
 
+	//Mac快捷键上传才要通知上传中，Win快捷键上传由于任务栏会闪现php-cgi，当图标显示就表明是上传中，无需通知
+	if(isset($alfred) && PHP_OS=='Darwin'){
+		//提示上传中
+		(new Common())->sendNotification('uploading');
+	}
+	// file_put_contents('/Users/bruce/Downloads/qcloud.txt', var_export($argv,true));exit;
 	$uploader = 'uploader\Upload';
 	// $uploader = 'uploader\UploadCoroutine';
 	//getPublickLink
@@ -135,7 +149,7 @@
 			'code' => 'success',
 			'data' => [
 				'filename' => $_FILES['file']['name'],
-				'url' => $link,
+				'url' => trim($link),
 			],
 		];
 		
@@ -143,10 +157,33 @@
 		$json = json_encode($data, JSON_UNESCAPED_UNICODE);
 		echo $json;
 	}else{
-		//这个通知，在一个win10可以，另一个win10又不行(这个win10上用管理员又可以，可是另一上win10也没有用管理员，而且本身用户都有管理员权限)，在win上还是用python来通知好了。
+		//快捷键上传
 		if(isset($alfred)){
-			(new Common())->sendNotification('success');
+			$link = trim($link);
+			switch(PHP_OS){
+				case 'Darwin':
+					// Mac不需要复制到剪贴板，因为Alfred会做这个事，所以我们直接把返回的链接输出给Alfred
+					echo $link;
+					break;
+				case 'WINNT':
+					//复制到剪贴板
+					(new Common())->copyPlainTextToClipboard($link);
+					//Win快捷键上传由于任务栏会闪现php-cgi，当图标消失就是上传完，所以无需通知上传成功
+					break;
+				default:
+					//复制到剪贴板
+					(new Common())->copyPlainTextToClipboard($link);
+			}
+		}else{
+			// 右击上传
+			echo $link;
 		}
-		//如果是client模式，则直接返回链接
-		echo $link;
+
+		if(preg_match('/:?http[s]?(.*?)$/', $link)){
+			//通知上传成功
+			(new Common())->sendNotification('success');
+		}else{
+			//通知上传失败
+			(new Common())->sendNotification('failed');
+		}
 	}

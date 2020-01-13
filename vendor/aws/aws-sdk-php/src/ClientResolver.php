@@ -139,7 +139,7 @@ class ClientResolver
             'valid'   => [CredentialsInterface::class, CacheInterface::class, 'array', 'bool', 'callable'],
             'doc'     => 'Specifies the credentials used to sign requests. Provide an Aws\Credentials\CredentialsInterface object, an associative array of "key", "secret", and an optional "token" key, `false` to use null credentials, or a callable credentials provider used to create credentials or return null. See Aws\\Credentials\\CredentialProvider for a list of built-in credentials providers. If no credentials are provided, the SDK will attempt to load them from the environment.',
             'fn'      => [__CLASS__, '_apply_credentials'],
-            'default' => [CredentialProvider::class, 'defaultProvider'],
+            'default' => [__CLASS__, '_default_credential_provider'],
         ],
         'endpoint_discovery' => [
             'type'     => 'value',
@@ -443,6 +443,11 @@ class ClientResolver
         }
     }
 
+    public static function _default_credential_provider(array $args)
+    {
+        return CredentialProvider::defaultProvider($args);
+    }
+
     public static function _apply_csm($value, array &$args, HandlerList $list)
     {
         if ($value === false) {
@@ -511,7 +516,8 @@ class ClientResolver
             $result = EndpointProvider::resolve($value, [
                 'service' => $endpointPrefix,
                 'region'  => $args['region'],
-                'scheme'  => $args['scheme']
+                'scheme'  => $args['scheme'],
+                'options' => self::getEndpointProviderOptions($args),
             ]);
 
             $args['endpoint'] = $result['endpoint'];
@@ -694,7 +700,8 @@ class ClientResolver
 
     public static function _default_endpoint_provider(array $args)
     {
-        return PartitionEndpointProvider::defaultProvider()
+        $options = self::getEndpointProviderOptions($args);
+        return PartitionEndpointProvider::defaultProvider($options)
             ->getPartition($args['region'], $args['service']);
     }
 
@@ -807,5 +814,21 @@ A "region" configuration value is required for the "{$service}" service
 (e.g., "us-west-2"). A list of available public regions and endpoints can be
 found at http://docs.aws.amazon.com/general/latest/gr/rande.html.
 EOT;
+    }
+
+    /**
+     * Extracts client options for the endpoint provider to its own array
+     *
+     * @param array $args
+     * @return array
+     */
+    private static function getEndpointProviderOptions(array $args)
+    {
+        $options = [];
+        if (isset($args['sts_regional_endpoints'])) {
+            $options['sts_regional_endpoints'] = $args['sts_regional_endpoints'];
+        }
+
+        return $options;
     }
 }

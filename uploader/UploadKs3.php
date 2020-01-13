@@ -2,15 +2,15 @@
 /**
  * Created by PhpStorm.
  * User: bruce
- * Date: 2018-09-06
- * Time: 21:01
+ * Date: 2019-07-24
+ * Time: 16:18
  */
 
 namespace uploader;
+
 use Ks3Client;
 
 class UploadKs3 extends Upload{
-
     public $accessKey;
     public $secretKey;
     public $bucket;
@@ -33,7 +33,6 @@ class UploadKs3 extends Upload{
      */
     public function __construct($params)
     {
-    	$ch = curl_init();
 	    $ServerConfig = $params['config']['storageTypes'][$params['uploadServer']];
 	    
         $this->accessKey = $ServerConfig['accessKey'];
@@ -41,6 +40,9 @@ class UploadKs3 extends Upload{
         $this->bucket = $ServerConfig['bucket'];
         $this->endpoint = $ServerConfig['endpoint'];
 	    $this->domain = $ServerConfig['domain'] ?? '';
+	    //默认域名：https://ks3-cn-guangzhou.ksyun.com（与不同区域有关）
+	    $defaultDomain = 'https://' . $this->endpoint;
+	    !$this->domain && $this->domain = $defaultDomain;
 	
 	    if(!isset($ServerConfig['directory']) || ($ServerConfig['directory']=='' && $ServerConfig['directory']!==false)){
 		    //如果没有设置，使用默认的按年/月/日方式使用目录
@@ -56,45 +58,49 @@ class UploadKs3 extends Upload{
     }
 	
 	/**
-	 * Upload images to Aliyun OSS(Object Storage Service)
+	 * Upload files to KingSoft KS3(KingSoft Standard Storage Service)
 	 * @param $key
 	 * @param $uploadFilePath
 	 *
-	 * @return string
+	 * @return array
 	 */
 	public function upload($key, $uploadFilePath){
 	    try {
-		    $aa = curl_init();
-		    // var_export($aa);exit;
 	    	if($this->directory){
-			    $key = $this->directory. '/' . $key;
+			    $key = $this->directory . '/' . $key;
 		    }
 	    	
 		    $client = new Ks3Client($this->accessKey, $this->secretKey, $this->endpoint);
+	    	$fp = fopen($uploadFilePath, 'rb');
 		    $res = $client->putObjectByFile([
 		    	'Bucket' => $this->bucket,
 		    	'Key' => $key,
 			    "ACL"=>"public-read",//可以设置访问权限,合法值,private、public-read
 		    	'Content' => [
-		    		'content' => fopen($uploadFilePath, 'r'),
+		    		'content' => $fp,
 				    'seek_position' => 0,
 			    ],
 		    ]);
+		    is_resource($fp) && fclose($fp);
 		    
-	    	
 		    if(!isset($res['ETag'])){
-			    throw new \Exception(var_export($res, true)."\n");
+			    throw new Exception(var_export($res, true));
 		    }
-		    //默认域名：https://ks3-cn-guangzhou.ksyun.com（与不同区域有关）
-		    if(!$this->domain){
-		    	$this->domain = 'https://' . $this->endpoint;
-		    }
-		    $link = $this->domain . '/' . $this->bucket . '/' . $key;
-	    } catch (\Exception $e) {
+		    
+		    $data = [
+			    'code' => 0,
+			    'msg' => 'success',
+			    'key' => $key,
+			    'domain' => $this->domain,
+		    ];
+	    } catch (Exception $e) {
 		    //上传出错，记录错误日志(为了保证统一处理那里不出错，虽然报错，但这里还是返回对应格式)
-		    $link = $e->getMessage();
-		    $this->writeLog(date('Y-m-d H:i:s').'(' . $this->uploadServer . ') => '.$e->getMessage(), 'error_log');
+		    $data = [
+			    'code' => -1,
+			    'msg' => $e->getMessage(),
+		    ];
+		    $this->writeLog(date('Y-m-d H:i:s').'(' . $this->uploadServer . ') => '.$e->getMessage() . "\n\n", 'error_log');
 	    }
-	    return $link;
+	    return $data;
     }
 }

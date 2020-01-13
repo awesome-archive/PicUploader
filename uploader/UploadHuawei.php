@@ -2,8 +2,8 @@
 /**
  * Created by PhpStorm.
  * User: bruce
- * Date: 2018-09-06
- * Time: 00:46
+ * Date: 2019-07-19
+ * Time: 20:32
  */
 
 namespace uploader;
@@ -46,6 +46,9 @@ class UploadHuawei extends Common {
         $this->bucket = $ServerConfig['bucket'];
         $this->endpoint = $ServerConfig['endpoint'];
         $this->domain = $ServerConfig['domain'];
+	    //http://markdown.obs.cn-south-1.myhuaweicloud.com
+	    $defaultDomain = 'https://' . $this->bucket . '.' . $this->endpoint;
+	    !$this->domain && $this->domain = $defaultDomain;
 	
 	    if(!isset($ServerConfig['directory']) || ($ServerConfig['directory']=='' && $ServerConfig['directory']!==false)){
 		    //如果没有设置，使用默认的按年/月/日方式使用目录
@@ -61,17 +64,16 @@ class UploadHuawei extends Common {
     }
 	
 	/**
-	 * Upload Images to Huawei OBS(Object-O)
+	 * Upload files to Huawei OBS(Object-Storage)
 	 * @param $key
 	 * @param $uploadFilePath
 	 *
-	 * @return string
-	 * @throws \Exception
+	 * @return array
 	 */
 	public function upload($key, $uploadFilePath){
 		try {
 			if($this->directory){
-				$key = $this->directory. '/' . $key;
+				$key = $this->directory . '/' . $key;
 			}
 			
 			$obsClient = ObsClient::factory([
@@ -92,13 +94,15 @@ class UploadHuawei extends Common {
 			/*
 			 * Step 2: upload a part
 			 */
+			$fp = fopen($uploadFilePath, 'rb');
 			$resp = $obsClient->uploadPart([
 				'Bucket' => $this->bucket,
 				'Key' => $key,
 				'UploadId' => $uploadId,
 				'PartNumber' => 1,
-				'Body' => fopen($uploadFilePath, 'rb'),
+				'Body' => $fp,
 			]);
+			is_resource($fp) && fclose($fp);
 			
 			$etag = $resp['ETag'];
 			
@@ -115,16 +119,23 @@ class UploadHuawei extends Common {
 			]);
 
 			if(!isset($res['Key'])){
-				throw new ObsException(var_export($res, true)."\n");
-			}else{
-				$this->domain = $this->domain ? $this->domain : 'https://'.$this->bucket.'.'.$this->endpoint;
-				$link = $this->domain . '/' . $res['Key'];
+				throw new ObsException(var_export($res, true));
 			}
+
+			$data = [
+				'code' => 0,
+				'msg' => 'success',
+				'key' => $key,
+				'domain' => $this->domain,
+			];
 		}catch (ObsException $e){
 			//上传出错，记录错误日志(为了保证统一处理那里不出错，虽然报错，但这里还是返回对应格式)
-			$link = $e->getMessage();
-			$this->writeLog(date('Y-m-d H:i:s').'(' . $this->uploadServer . ') => '.$e->getMessage(), 'error_log');
+			$data = [
+				'code' => -1,
+				'msg' => $e->getMessage(),
+			];
+			$this->writeLog(date('Y-m-d H:i:s').'(' . $this->uploadServer . ') => '.$e->getMessage() . "\n\n", 'error_log');
 		}
-		return $link;
+		return $data;
 	}
 }

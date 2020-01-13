@@ -8,6 +8,9 @@
 
 namespace settings;
 
+use uploader\UploadOnedrive;
+use uploader\UploadGoogledrive;
+
 class SettingController extends Controller {
 	public $settings;
 	public $storageTypes;
@@ -36,6 +39,7 @@ class SettingController extends Controller {
 	 * @param $params
 	 *
 	 * @return false|string
+	 * @throws \Exception
 	 */
 	public function getStorageParams($params){
 		$key = $params['key'];
@@ -51,10 +55,34 @@ class SettingController extends Controller {
 			$code = 1;
 		}
 		unset($columns['name']);
-		return json_encode([
+		
+		$returnArr = [
 			'code' => $code,
 			'data' => $columns,
-		]);
+		];
+		//暂时用false
+		$authorized = false;
+		if(in_array($key, ['onedrive', 'googledrive', 'dropbox'])){
+			$config = $this->getMergeSettings();
+			$constructorParams = ['config' => $config, 'argv' => '', 'uploadServer' => $key];
+			$uploader = 'uploader\\Upload' . ucfirst($key);
+			/** @var UploadOnedrive $upload */
+			/** @var UploadGoogledrive $upload */
+			$upload = new $uploader($constructorParams);
+			$token = $upload->getAccessToken();
+			$authUrl = '';
+			if($token){
+				$authorized = true;
+			}else{
+				$authUrl = $upload->getAuthorizationUrl();
+			}
+			
+			$returnArr['oauth'] = [
+				'authorized' => $authorized,
+				'authUrl' => $authUrl,
+			];
+		}
+		return json_encode($returnArr);
 	}
 	
 	/**
@@ -67,7 +95,9 @@ class SettingController extends Controller {
 	public function setStorageParams ($params){
 		$key = $params['key'];
 		unset($_POST['key']);
-		
+		foreach($_POST as &$val){
+			$val = trim($val);
+		}
 		!is_dir($this->storagesDir) && mkdir($this->storagesDir, 0777);
 		$jsonFile = $this->storagesDir.'/storage-'.$key.'.json';
 		file_put_contents($jsonFile, json_encode($_POST, JSON_UNESCAPED_SLASHES));
@@ -115,11 +145,12 @@ class SettingController extends Controller {
 			foreach($this->storageTypes as $key=>$val){
 				$storageType[$key] = [
 					'isActive' => strpos(strtolower($this->settings['storageType']), $key)===false ? '0' : '1',
-					'name' => $val['name'],
+					'name' => (isset($val['name']) && $val['name']) ? $val['name'] : $key,
 				];
 			}
 			$generalSettings['storageType'] = $storageType;
 		}
+		
 		//=========================== 通用设置 结束 ===============================
 		
 		//=========================== 图片水印设置 开始 ===============================
@@ -204,7 +235,7 @@ class SettingController extends Controller {
 		$imageWatermarkJson = json_encode($_POST['watermark']['image'], JSON_UNESCAPED_UNICODE);
 		$customFormatJson = json_encode($_POST['customFormat'], JSON_UNESCAPED_UNICODE);
 		
-		$commonUsedDir = trim($_POST['common-used-dir']);
+		$commonUsedDir = trim($_POST['commonUsedDir']);
 		$commonUsedDirs = [];
 		if($commonUsedDir){
 			$commonUsedDirs = explode("\n", $commonUsedDir);
@@ -221,12 +252,16 @@ class SettingController extends Controller {
 		unset($_POST['watermark']['text']);
 		unset($_POST['watermark']['image']);
 		unset($_POST['customFormat']);
-		unset($_POST['common-used-dir']);
+		unset($_POST['commonUsedDir']);
 		
-		// !isset($_POST['allowMimeTypes']) && $_POST['allowMimeTypes'] = [];
 		!isset($_POST['storageType']) && $_POST['storageType'] = [];
 		!isset($_POST['watermark']['useWatermark']) && $_POST['watermark']['useWatermark'] = 0;
 		!isset($_POST['watermark']['type']) && $_POST['watermark']['type'] = '';
+		foreach($_POST as &$val){
+			if(is_string($val)){
+				$val = trim($val);
+			}
+		}
 		$generalSettingsJson = json_encode($_POST, JSON_UNESCAPED_UNICODE);
 		
 		file_put_contents($textWatermarkFile, $textWatermarkJson);
@@ -256,11 +291,6 @@ class SettingController extends Controller {
 				$key = str_replace('.json', '', substr($storagesFile, strrpos($storagesFile,'-') + 1));
 				$backendStorageKeys[] = $key;
 				$storageTypes[$key] = json_decode(file_get_contents($storagesFile), true);
-				
-				//替换年月日位符为当前年月日
-				/*if(isset($storageTypes[$key]['directory']) && $storageTypes[$key]['directory']){
-					$storageTypes[$key]['directory'] = strtr($storageTypes[$key]['directory'], ['{Y}'=>date('Y'), '{m}'=>date('m'), '{d}'=>date('d')]);
-				}*/
 			}
 			$configStorageKeys = array_keys($this->settings['storageTypes']);
 			//对比配置文件中的存储引擎，如果其中有某个存储引擎在后台配置中不存在，则把它合并到后台的配置中(当然只是合并输出，并未存储到后台)
@@ -519,6 +549,30 @@ class SettingController extends Controller {
 		return json_encode([
 			'code' => 0,
 			'msg' => 'success',
+		]);
+	}
+	
+	/**
+	 *
+	 * @param $data
+	 *
+	 * @return false|string
+	 * @throws \Exception
+	 */
+	public function setRedirectUri($data){
+		$config = $this->getMergeSettings();
+		$key = $data['key'];
+		$constructorParams = ['config' => $config, 'argv' => '', 'uploadServer' => $key];
+		$uploader = 'uploader\\Upload' . ucfirst($key);
+		/** @var UploadOnedrive $upload */
+		/** @var UploadGoogledrive $upload */
+		$upload = new $uploader($constructorParams);
+		$authUrl = (new $upload($constructorParams))->getAuthorizationUrl();
+		file_put_contents(APP_PATH.'/.tmp/redirectUri', $data['uri']);
+		return json_encode([
+			'code' => 0,
+			'authUrl' => $authUrl,
+			'msg' => '保存重定向地址成功',
 		]);
 	}
 }

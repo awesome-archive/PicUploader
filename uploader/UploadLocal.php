@@ -8,6 +8,8 @@
 	
 namespace uploader;
 
+use Exception;
+
 class UploadLocal extends Common {
 	public $prefix;
 	public $directory;
@@ -28,15 +30,15 @@ class UploadLocal extends Common {
 	public function __construct($params)
 	{
 		$ServerConfig = $params['config']['storageTypes'][$params['uploadServer']];
-		
-		$this->prefix = rtrim($ServerConfig['prefix'], '/');
+		//处理目标机是Windows的情况(虽然不太可能是Win，但who knows?)
+		$this->prefix = rtrim(str_replace( '\\', '/', $ServerConfig['prefix']), '/');
 		$this->domain = $ServerConfig['domain'];
 		if(!isset($ServerConfig['directory']) || ($ServerConfig['directory']=='' && $ServerConfig['directory']!==false)){
 			//如果没有设置，使用默认的按年/月/日方式使用目录
 			$this->directory = date('Y/m/d');
 		}else{
 			//设置了，则按设置的目录走
-			$this->directory = trim($ServerConfig['directory'], '/');
+			$this->directory = trim(str_replace( '\\', '/', $ServerConfig['directory']), '/');
 		}
 		$this->uploadServer = ucfirst($params['uploadServer']);
 		
@@ -45,33 +47,43 @@ class UploadLocal extends Common {
 	}
 	
 	/**
-	 * Upload Images to local(the server that PicUploader located at)
+	 * Upload files to local(the server that PicUploader located at)
 	 * @param $key
 	 * @param $uploadFilePath
 	 *
-	 * @return string
+	 * @return array
 	 */
 	public function upload($key, $uploadFilePath){
 		try{
 			if(!is_dir($this->prefix)){
-				throw new \Exception('Please make sure that prefix directory exists.');
+				throw new Exception('Please make sure that prefix directory exists.');
 			}
 			
-			$destDir = $this->prefix.'/'.$this->directory;
+			$destDir = $this->prefix . '/' . $this->directory;
+			
 			//如果目录不存在，则创建
 			!is_dir($destDir) && @mkdir($destDir, 0777, true);
 			
-			$destFilePath = $destDir.'/'.$key;
-			
+			$destFilePath = $destDir . '/' . $key;
 			if(!copy($uploadFilePath, $destFilePath)){
-				throw new \Exception('Upload failed');
+				throw new Exception('Upload failed');
 			}
-			$link = $this->domain.'/'.$this->directory.'/'.$key;
-		}catch (\Exception $e){
+			$key = $this->directory . '/' . $key;
+			
+			$data = [
+				'code' => 0,
+				'msg' => 'success',
+				'key' => $key,
+				'domain' => $this->domain,
+			];
+		}catch (Exception $e){
 			//上传出错，记录错误日志(为了保证统一处理那里不出错，虽然报错，但这里还是返回对应格式)
-			$link = $e->getMessage();
-			$this->writeLog(date('Y-m-d H:i:s').'(' . $this->uploadServer . ') => '.$e->getMessage(), 'error_log');
+			$data = [
+				'code' => -1,
+				'msg' => $e->getMessage(),
+			];
+			$this->writeLog(date('Y-m-d H:i:s').'(' . $this->uploadServer . ') => '.$e->getMessage() . "\n\n", 'error_log');
 		}
-		return $link;
+		return $data;
 	}
 }

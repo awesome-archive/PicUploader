@@ -8,6 +8,9 @@
 
 namespace uploader;
 
+use Aws\S3\S3Client;
+use Exception;
+use GuzzleHttp\Command\Result;
 use Qcloud\Cos\Client;
 
 class UploadTencent extends Common {
@@ -32,13 +35,17 @@ class UploadTencent extends Common {
      */
     public function __construct($params)
     {
-	    $ServerConfig = $params['config']['storageTypes'][$params['uploadServer']];;
+	    $ServerConfig = $params['config']['storageTypes'][$params['uploadServer']];
 	    
         $this->region = $ServerConfig['region'];
         $this->secretId = $ServerConfig['secretId'];
         $this->secretKey = $ServerConfig['secretKey'];
         $this->bucket = $ServerConfig['bucket'];
         $this->domain = $ServerConfig['domain'] ?? '';
+	    // http://markdown-1254010860.cos.ap-guangzhou.myqcloud.com
+	    $defaultDomain = 'http://' . $this->bucket . '.cos.' . $this->region . '.myqcloud.com';
+	    !$this->domain && $this->domain = $defaultDomain;
+	    
 	    if(!isset($ServerConfig['directory']) || ($ServerConfig['directory']=='' && $ServerConfig['directory']!==false)){
 		    //如果没有设置，使用默认的按年/月/日方式使用目录
 		    $this->directory = date('Y/m/d');
@@ -53,49 +60,88 @@ class UploadTencent extends Common {
     }
 	
 	/**
-	 * Upload Images to Tecent COS(Cloud Object Storage)
+	 * Upload files to Tecent COS(Cloud Object Storage)
 	 * @param $key
 	 * @param $uploadFilePath
+	 * @param $useS3CompatibleApi
 	 *
-	 * @return string
+	 * @return array
 	 */
-	public function upload($key, $uploadFilePath){
+	public function upload($key, $uploadFilePath, $useS3CompatibleApi=true){
         try{
-	        $cosClient = new Client([
-		        'region' => $this->region,
-		        'credentials' => [
-			        'secretId' => $this->secretId,
-			        'secretKey' => $this->secretKey,
-		        ],
-	        ]);
 	        if($this->directory){
-		        $key = $this->directory. '/' . $key;
+		        $key = $this->directory . '/' . $key;
 	        }
-	        $retObj = $cosClient->Upload($this->bucket, $key, fopen($uploadFilePath, 'rb'));
-	        if (!is_object($retObj) || !$retObj->get('Location')) {
-		        //上传数错，抛出异常
-		        throw new \Exception(var_export($retObj, true)."\n");
-	        } else {
-		        //拼接域名和优化参数成为一个可访问的外链
-		        $location = urldecode($retObj->get('Location'));
-		        $matches = [];
-		        preg_match('/\d{4}\/\d{2}\/\d{2}\/.+/',$location,$matches);
-		        $key = $matches[0] ?? '';
-		        if(!$this->domain){
-			        $this->domain = 'http://'.$this->bucket.'.cos.'.$this->region.'.myqcloud.com';
+	
+	        if($useS3CompatibleApi){
+		        // ================= s3兼容 接口 start ==================
+		        $endpoint = 'https://cos.' . $this->region . '.myqcloud.com';
+		        $config = [
+			        'version'     => 'latest',
+			        'region'      => $this->region,
+			        'credentials' => [
+				        'key'    => $this->secretId,
+				        'secret' => $this->secretKey,
+			        ],
+			        'endpoint' => $endpoint,
+			        'signature_version' => 'v4',
+		        ];
+		        
+		        $s3Client = new S3Client($config);
+		        $fp = fopen($uploadFilePath, 'rb');
+		        $retObj = $s3Client->upload($this->bucket, $key, $fp, 'public-read');
+		        is_resource($fp) && fclose($fp);
+				
+		        if(!is_object($retObj) || !$retObj->get('ObjectURL')){
+			        throw new Exception(var_export($retObj, true));
 		        }
-		        // http://markdown-1254010860.cos.ap-guangzhou.myqcloud.com
-		        if($key){
-			        $link = $this->domain .'/'.$key;
-		        }else{
-			        $link = $location;
+		
+		        //返回链接格式：
+		        //https://markdown-1254010860.cos.ap-guangzhou.myqcloud.com/2019/09/10/d9431e84fa2c07024af4b8d3b9cb0b7e.jpg
+		        //可以这样获取返回的链接，但我们不用它，直接拼就可以
+		        // $link = $retObj->get('ObjectURL');
+		        // ================= s3兼容 接口 end ==================
+	        }else{
+		        $cosClient = new Client([
+			        'region' => $this->region,
+			        'credentials' => [
+				        'secretId' => $this->secretId,
+				        'secretKey' => $this->secretKey,
+			        ],
+		        ]);
+		        
+		        $fp = fopen($uploadFilePath, 'rb');
+		        /** @var Result $retObj */
+		        $retObj = $cosClient->Upload($this->bucket, $key, $fp, [
+			        'ContentType' => $this->getMimeType($uploadFilePath),
+		        ]);
+		        is_resource($fp) && fclose($fp);
+		
+		        if (!is_object($retObj)) {
+			        //上传数错，抛出异常
+			        throw new Exception(var_export($retObj, true));
+		        }
+		        $retArr = $retObj->toArray();
+		        if(!isset($retArr['ETag'])){
+			        //上传数错，抛出异常
+			        throw new Exception(var_export($retObj, true));
 		        }
 	        }
-        }catch (\Exception $e){
+	        
+	        $data = [
+		        'code' => 0,
+		        'msg' => 'success',
+		        'key' => $key,
+		        'domain' => $this->domain,
+	        ];
+        }catch (Exception $e){
 	        //上传出错，记录错误日志(为了保证统一处理那里不出错，虽然报错，但这里还是返回对应格式)
-	        $link = $e->getMessage();
-	        $this->writeLog(date('Y-m-d H:i:s').'(' . $this->uploadServer . ') => '.$e->getMessage(), 'error_log');
+	        $data = [
+		        'code' => -1,
+		        'msg' => $e->getMessage(),
+	        ];
+	        $this->writeLog(date('Y-m-d H:i:s').'(' . $this->uploadServer . ') => '.$e->getMessage() . "\n\n", 'error_log');
         }
-		return $link;
+		return $data;
 	}
 }

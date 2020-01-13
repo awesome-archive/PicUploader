@@ -1,5 +1,7 @@
 <?php
 	define('APP_PATH', strtr(__DIR__, '\\', '/'));
+	
+	// 历史记录页面
 	if(isset($_GET['history']) && $_GET['history']==1){
 		include APP_PATH.'/settings/history.php';
 		exit;
@@ -11,6 +13,7 @@
 		$config = require APP_PATH . '/config/config.php';
 	}
 	file_put_contents(APP_PATH . '/config/.config.json', json_encode($config, JSON_UNESCAPED_UNICODE));
+	
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -22,7 +25,7 @@
 <!--	<script src="/static/rgbaColorPicker/rgbaColorPicker.js"></script>-->
 	
 	<script src="/static/js/clipboard.js"></script>
-	<script src="https://cdn.bootcss.com/jquery/3.3.1/jquery.min.js"></script>
+	<script src="/static/js/jquery.min.js"></script>
 	
 	<!-- 依赖jQuery -->
 	<link href="/static/Spectrum-ColorPicker/spectrum.css" rel="stylesheet">
@@ -33,8 +36,8 @@
 	
 	<link href="/static/font-awesome-4.7.0/css/font-awesome.min.css" rel="stylesheet">
 	
-	<link href="/static/css/style.css" rel="stylesheet">
-	<script src="/static/js/script.js"></script>
+	<link href="/static/css/dashboard.css" rel="stylesheet">
+	<script src="/static/js/dashboard.js"></script>
 </head>
 <body>
 	<div class="container">
@@ -58,7 +61,7 @@
 						<!--<i class="fa fa-times-circle close"></i>-->
 						<ul class="list">
 							<?php foreach($config['storageTypes'] as $key=>$storageType):?>
-							<li data-key="<?=$key?>" class="cloud"><?=isset($storageType['name']) ? $storageType['name'] : $key?></li>
+							<li data-key="<?=$key?>" class="cloud"><?=(isset($storageType['name']) && $storageType['name']) ? $storageType['name'] : $key?></li>
 							<?php endforeach;?>
 						</ul>
 					</div>

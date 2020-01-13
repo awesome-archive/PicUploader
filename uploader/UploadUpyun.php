@@ -9,6 +9,7 @@
 
 namespace uploader;
 
+use Exception;
 use Upyun\Config;
 use Upyun\Upyun;
 
@@ -35,12 +36,16 @@ class UploadUpyun extends Upload{
      */
     public function __construct($params)
     {
-	    $ServerConfig = $params['config']['storageTypes'][$params['uploadServer']];;
+	    $ServerConfig = $params['config']['storageTypes'][$params['uploadServer']];
 	    
         $this->serviceName = $ServerConfig['serviceName'];
         $this->operator = $ServerConfig['operator'];
         $this->password = $ServerConfig['password'];
         $this->domain = $ServerConfig['domain'] ?? '';
+        //http://blog-markdown.test.upcdn.net
+        $defaultDomain = 'http://' . $this->serviceName . '.test.upcdn.net';
+        !$this->domain && $this->domain = $defaultDomain;
+        
 	    if(!isset($ServerConfig['directory']) || ($ServerConfig['directory']=='' && $ServerConfig['directory']!==false)){
 		    //如果没有设置，使用默认的按年/月/日方式使用目录
 		    $this->directory = date('Y/m/d');
@@ -55,34 +60,42 @@ class UploadUpyun extends Upload{
     }
 	
 	/**
-	 * Upload images to Upyun
+	 * Upload files to Upyun(又拍云)
 	 * @param $key
 	 * @param $uploadFilePath
 	 *
-	 * @return string
-	 * @throws \Exception
+	 * @return array
+	 * @throws Exception
 	 */
 	public function upload($key, $uploadFilePath){
 	    try {
 		    if($this->directory){
-			    $key = $this->directory. '/' . $key;
+			    $key = $this->directory . '/' . $key;
 		    }
 		    $serviceConfig = new Config($this->serviceName, $this->operator, $this->password);
 		    $client = new Upyun($serviceConfig);
-		    $retArr = $client->write($key, fopen($uploadFilePath, 'r'));
-		
+		    $fp = fopen($uploadFilePath, 'rb');
+		    $retArr = $client->write($key, $fp);
+		    is_resource($fp) && fclose($fp);
+			
 		    if(!isset($retArr['x-upyun-content-length'])){
-			    throw new \Exception(var_export($retArr, true)."\n");
+			    throw new Exception(var_export($retArr, true));
 		    }
-		    if(!$this->domain){
-			    $this->domain = 'http://'.$this->serviceName.'.test.upcdn.net';
-		    }
-		    $link = $this->domain.'/'.$key;
-	    } catch (NosException $e) {
+		
+		    $data = [
+			    'code' => 0,
+			    'msg' => 'success',
+			    'key' => $key,
+			    'domain' => $this->domain,
+		    ];
+	    } catch (Exception $e) {
 		    //上传出错，记录错误日志(为了保证统一处理那里不出错，虽然报错，但这里还是返回对应格式)
-		    $link = $e->getMessage();
-		    $this->writeLog(date('Y-m-d H:i:s').'(' . $this->uploadServer . ') => '.$e->getMessage(), 'error_log');
+		    $data = [
+			    'code' => -1,
+			    'msg' => $e->getMessage(),
+		    ];
+		    $this->writeLog(date('Y-m-d H:i:s').'(' . $this->uploadServer . ') => '.$e->getMessage() . "\n\n", 'error_log');
 	    }
-		return $link;
+		return $data;
     }
 }

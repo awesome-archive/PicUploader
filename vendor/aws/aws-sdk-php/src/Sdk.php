@@ -144,12 +144,18 @@ namespace Aws;
  * @method \Aws\MultiRegionClient createMultiRegionElasticsearchService(array $args = [])
  * @method \Aws\Emr\EmrClient createEmr(array $args = [])
  * @method \Aws\MultiRegionClient createMultiRegionEmr(array $args = [])
+ * @method \Aws\EventBridge\EventBridgeClient createEventBridge(array $args = [])
+ * @method \Aws\MultiRegionClient createMultiRegionEventBridge(array $args = [])
  * @method \Aws\FMS\FMSClient createFMS(array $args = [])
  * @method \Aws\MultiRegionClient createMultiRegionFMS(array $args = [])
  * @method \Aws\FSx\FSxClient createFSx(array $args = [])
  * @method \Aws\MultiRegionClient createMultiRegionFSx(array $args = [])
  * @method \Aws\Firehose\FirehoseClient createFirehose(array $args = [])
  * @method \Aws\MultiRegionClient createMultiRegionFirehose(array $args = [])
+ * @method \Aws\ForecastQueryService\ForecastQueryServiceClient createForecastQueryService(array $args = [])
+ * @method \Aws\MultiRegionClient createMultiRegionForecastQueryService(array $args = [])
+ * @method \Aws\ForecastService\ForecastServiceClient createForecastService(array $args = [])
+ * @method \Aws\MultiRegionClient createMultiRegionForecastService(array $args = [])
  * @method \Aws\GameLift\GameLiftClient createGameLift(array $args = [])
  * @method \Aws\MultiRegionClient createMultiRegionGameLift(array $args = [])
  * @method \Aws\Glacier\GlacierClient createGlacier(array $args = [])
@@ -206,6 +212,8 @@ namespace Aws;
  * @method \Aws\MultiRegionClient createMultiRegionKinesisVideoMedia(array $args = [])
  * @method \Aws\Kms\KmsClient createKms(array $args = [])
  * @method \Aws\MultiRegionClient createMultiRegionKms(array $args = [])
+ * @method \Aws\LakeFormation\LakeFormationClient createLakeFormation(array $args = [])
+ * @method \Aws\MultiRegionClient createMultiRegionLakeFormation(array $args = [])
  * @method \Aws\Lambda\LambdaClient createLambda(array $args = [])
  * @method \Aws\MultiRegionClient createMultiRegionLambda(array $args = [])
  * @method \Aws\LexModelBuildingService\LexModelBuildingServiceClient createLexModelBuildingService(array $args = [])
@@ -278,6 +286,10 @@ namespace Aws;
  * @method \Aws\MultiRegionClient createMultiRegionPolly(array $args = [])
  * @method \Aws\Pricing\PricingClient createPricing(array $args = [])
  * @method \Aws\MultiRegionClient createMultiRegionPricing(array $args = [])
+ * @method \Aws\QLDB\QLDBClient createQLDB(array $args = [])
+ * @method \Aws\MultiRegionClient createMultiRegionQLDB(array $args = [])
+ * @method \Aws\QLDBSession\QLDBSessionClient createQLDBSession(array $args = [])
+ * @method \Aws\MultiRegionClient createMultiRegionQLDBSession(array $args = [])
  * @method \Aws\QuickSight\QuickSightClient createQuickSight(array $args = [])
  * @method \Aws\MultiRegionClient createMultiRegionQuickSight(array $args = [])
  * @method \Aws\RAM\RAMClient createRAM(array $args = [])
@@ -364,6 +376,8 @@ namespace Aws;
  * @method \Aws\MultiRegionClient createMultiRegionWorkLink(array $args = [])
  * @method \Aws\WorkMail\WorkMailClient createWorkMail(array $args = [])
  * @method \Aws\MultiRegionClient createMultiRegionWorkMail(array $args = [])
+ * @method \Aws\WorkMailMessageFlow\WorkMailMessageFlowClient createWorkMailMessageFlow(array $args = [])
+ * @method \Aws\MultiRegionClient createMultiRegionWorkMailMessageFlow(array $args = [])
  * @method \Aws\WorkSpaces\WorkSpacesClient createWorkSpaces(array $args = [])
  * @method \Aws\MultiRegionClient createMultiRegionWorkSpaces(array $args = [])
  * @method \Aws\XRay\XRayClient createXRay(array $args = [])
@@ -373,7 +387,7 @@ namespace Aws;
  */
 class Sdk
 {
-    const VERSION = '3.106.1';
+    const VERSION = '3.112.3';
 
     /** @var array Arguments for creating clients */
     private $args;

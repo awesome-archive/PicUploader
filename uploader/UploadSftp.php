@@ -8,6 +8,7 @@
 	
 namespace uploader;
 
+use Exception;
 use phpseclib\Net\SFTP;
 
 class UploadSftp extends Common {
@@ -53,29 +54,39 @@ class UploadSftp extends Common {
 	}
 	
 	/**
-	 * Upload Images to a server by sftp
+	 * Upload files to a server by sftp
 	 * @param $key
 	 * @param $uploadFilePath
 	 *
-	 * @return string
+	 * @return array
 	 */
 	public function upload($key, $uploadFilePath){
 		try{
 			$sftp = new SFTP($this->host);
 			if (!$sftp->login($this->username, $this->password)) {
-				throw new \Exception('Login Failed');
+				throw new Exception('Login Failed');
 			}
 			$key2 = $key;
-			$key = $this->prefix.'/'.$this->directory.'/'.$key;
+			$key = $this->prefix . '/' . $this->directory . '/' . $key;
 			if(!$sftp->put($key, $uploadFilePath, SFTP::SOURCE_LOCAL_FILE)){
-				throw new \Exception('Upload failed');
+				throw new Exception('Upload failed');
 			}
-			$link = $this->domain.'/'.$this->directory.'/'.$key2;
-		}catch (\Exception $e){
+			$key = $this->directory . '/' . $key2;
+			
+			$data = [
+				'code' => 0,
+				'msg' => 'success',
+				'key' => $key,
+				'domain' => $this->domain,
+			];
+		}catch (Exception $e){
 			//上传出错，记录错误日志(为了保证统一处理那里不出错，虽然报错，但这里还是返回对应格式)
-			$link = $e->getMessage();
-			$this->writeLog(date('Y-m-d H:i:s').'(' . $this->uploadServer . ') => '.$e->getMessage(), 'error_log');
+			$data = [
+				'code' => -1,
+				'msg' => $e->getMessage(),
+			];
+			$this->writeLog(date('Y-m-d H:i:s').'(' . $this->uploadServer . ') => '.$e->getMessage() . "\n\n", 'error_log');
 		}
-		return $link;
+		return $data;
 	}
 }

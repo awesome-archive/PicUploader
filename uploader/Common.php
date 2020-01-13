@@ -64,63 +64,50 @@ class Common {
      * @throws \ImagickException
      */
     public function optimizeImage($filePath, $resizeOptions, $quality=null){
-        $tmpImgPath = '';
         //We don't optimize gif image for the moment, cause it need extra tools. (e.g. gifsicle)
-        if($this->getMimeType($filePath) != 'image/gif'){
-            $optimize = false;
-            //图片宽高
-	        $imageSize = getimagesize($filePath);
-	        //图片宽度
-	        $width = $imageSize[0] ?? 0;
-	        //图片调试
-	        $height = $imageSize[1] ?? 0;
-	        //图片文件大小
-	        $fileSize = filesize($filePath);
-	        //使用新的压缩方式(百分比)
-	        if(is_array($resizeOptions)){
-	            $percentage = (int)$resizeOptions['percentage'] / 100;
-	            $widthGreaterThan = (int)$resizeOptions['widthGreaterThan'];
-	            $heightGreaterThan = (int)$resizeOptions['heightGreaterThan'];
-	            $carry = PHP_OS == 'Darwin' ? 1000 : 1024;
-		        $sizeBiggerThan = (int)$resizeOptions['sizeBiggerThan'] * $carry;
-		        
-		        if($width > $widthGreaterThan || $height > $heightGreaterThan || $fileSize > $sizeBiggerThan){
-			        $optimize = true;
-		        }
-		        
-		        //如果大于200K则压缩
-	        }else if($fileSize > 150*1024 && $width > $resizeOptions){
-	        	//旧压缩方式，压缩到指定宽度(高等比例压缩)
-		        $optimize = true;
-	        }
+	    $mime = $this->getMimeType($filePath);
+	    if(!preg_match('/image\/(jpeg|png|bmp|webp)/', $mime)){
+	    	return false;
+	    }
 	
-	        if(strpos($filePath, '.tmp') === false){
-		        $tmpDir = APP_PATH.'/.tmp';
-		        !is_dir($tmpDir) && @mkdir($tmpDir, 0777 ,true);
-		        $tmpImgPath = $tmpDir.'/.'.$this->getRandString().'.'.$this->getFileExt($filePath);
-	        }else{
-		        //$filePath is a tmp file
-		        $tmpImgPath = $filePath;
-	        }
-            if($optimize){
-	            //if no tmp file then create one
-                $img = new EasyImage($filePath);
-                
-                //旧方法压缩
-                if(is_integer($resizeOptions)){
-	                $img->fit_to_width($resizeOptions);
-                }else{
-                	//新方法压缩
-	                if($width > $height){
-		                $img->fit_to_width($width * $percentage);
-	                }else if($height > $width){
-		                $img->fit_to_height($height * $percentage);
-	                }
-                }
-                $img->save($tmpImgPath, $quality);
-
-            }
-        }
+	    $optimize = false;
+	    //图片宽高
+	    $imageSize = getimagesize($filePath);
+	    //图片宽度
+	    $width = $imageSize[0] ?? 0;
+	    //图片调试
+	    $height = $imageSize[1] ?? 0;
+	    //图片文件大小
+	    $fileSize = filesize($filePath);
+	    $percentage = (int)$resizeOptions['percentage'] / 100;
+	    $widthGreaterThan = (int)$resizeOptions['widthGreaterThan'];
+	    $heightGreaterThan = (int)$resizeOptions['heightGreaterThan'];
+	    $carry = PHP_OS == 'Darwin' ? 1000 : 1024;
+	    $sizeBiggerThan = (int)$resizeOptions['sizeBiggerThan'] * $carry;
+	
+	    if($width > $widthGreaterThan || $height > $heightGreaterThan || $fileSize > $sizeBiggerThan){
+		    $optimize = true;
+	    }
+	
+	    //$filePath is a tmp file
+	    $tmpImgPath = $filePath;
+	    if(strpos($filePath, '.tmp') === false){
+		    $tmpDir = APP_PATH.'/.tmp';
+		    !is_dir($tmpDir) && @mkdir($tmpDir, 0777 ,true);
+		    $tmpImgPath = $tmpDir . '/.' . $this->getRandString() . '.' . $this->getFileExt($filePath);
+	    }
+	    
+	    if($optimize){
+		    //if no tmp file then create one
+		    $img = new EasyImage($filePath);
+		    if($width > $height){
+			    $img->fit_to_width($width * $percentage);
+		    }else if($height > $width){
+			    $img->fit_to_height($height * $percentage);
+		    }
+		    $img->save($tmpImgPath, $quality);
+	    }
+	    
         return $tmpImgPath;
     }
 	
@@ -133,8 +120,7 @@ class Common {
 	 * @throws \Exception
 	 */
 	public function watermark($filePath, $quality){
-	    $img = new EasyImage();
-	    $img->load($filePath);
+	    $img = new EasyImage($filePath);
 	    $watermarkConfig = static::$config['watermark'];
 	    $type = $watermarkConfig['type'];
 		
@@ -205,7 +191,7 @@ class Common {
     		$filename = substr($filename, 1);
 	    }
     	$fileExt = $this->getFileExt($filePath);
-	    return str_replace('.'.$fileExt, '', $filename);
+	    return str_ireplace('.'.$fileExt, '', $filename);
     }
 
     /**
@@ -321,8 +307,7 @@ class Common {
 				    $link = $url;
 		    }
 	    }
-        
-        return $link."\n";
+        return $link;
     }
 
     /**
@@ -447,10 +432,12 @@ class Common {
 	 * @return string|null
 	 */
 	public function copyPlainTextToClipboard($content){
-	    $clipboard = PHP_OS=='Darwin' ? 'pbcopy' : (PHP_OS=='WINNT' ? 'clip' : 'xsel');
-	    $command = "echo '{$content}' | {$clipboard}";
-		$handle = popen($command, 'r');
-		pclose($handle);
+		//Mac和Win都自带，Linux(桌面系统)一般需要需要自己安装xclip(如Ubuntu: apt install xclip)
+	    $clipboard = PHP_OS=='Darwin' ? 'pbcopy' : (PHP_OS=='WINNT' ? 'clip' : 'xclip -selection clipboard');
+	    //$content不要加引号，因为引号会被输出的，因为这句命令已经是shell执行，而不是php
+		//echo也不是php命令，而是shell命令，win/mac/linux都有echo这个命令的
+	    $command = "echo {$content} | {$clipboard}";
+		return shell_exec($command);
     }
 	
 	/**
@@ -460,20 +447,41 @@ class Common {
 	public function getImageFromClipboard(){
 		$configFileName = PHP_OS=='WINNT' ? 'config_win.json' : 'config.json';
 		$config = json_decode(file_get_contents(APP_PATH.'/accessorys/PicUploaderHelper/'.$configFileName), true);
-		$imgPath = APP_PATH.'/.tmp/.screenshot.'.strtolower($config['img_type']);
-		is_file($imgPath) && unlink($imgPath);
-		
-		$command = '/usr/local/bin/pngpaste ' . $imgPath;
-		//通过Alfred调用时，这个$output始终无法获取，但直接执行Alfred调用的脚本又正常
-		$output = shell_exec($command);
-		if(!is_file($imgPath)){
-			$this->sendNotification('no_image');
-		}else{
-			$this->sendNotification('uploading');
+		$imgType = strtolower($config['img_type']) == 'jpeg' ? 'jpg' : 'png';
+		switch (PHP_OS){
+			case 'Darwin':
+				//图片地址不在$output中，而是在$imgPath里
+				$imgPath = APP_PATH.'/.tmp/image.'.$imgType;
+				// Mac上要求安装pngpaste(虽然叫pngpaste，但它支持输入PNG, PDF, GIF, TIF, JPEG，输出PNG, GIF, JPEG, TIFF.)
+				$command = '/usr/local/bin/pngpaste ' . $imgPath;
+				//pngpaste保存图片成功是没有任何输出的(Linux/Unit系统惯例)
+				$output = shell_exec($command);
+				break;
+			case 'WINNT':
+				// Win10可直接用，Win7需要升级powershell到5.1
+				$powershell = APP_PATH . '/accessorys/PicUploaderHelper/dump-clipboard-'.$imgType.'.ps1';
+				$command = "powershell -ExecutionPolicy Unrestricted {$powershell}";
+				$output = shell_exec($command);
+				$imgPath = trim($output);
+				break;
+			case 'Linux':
+			default:
+				//Linux桌面系统要求安装xclip(如Ubuntu: apt install xclip)
+				$imgPath = APP_PATH.'/.tmp/image.'.$imgType;
+				$mime = $imgType == 'jpg' ? 'image/jpeg' : 'image/png';
+				$xclipPath = '/usr/bin/xclip';
+				$clipboardContentTypeCmd = $xclipPath . ' -selection clipboard -t TARGETS -o';
+				$contentTypes = shell_exec($clipboardContentTypeCmd);
+				if(strpos($contentTypes, $mime) !== false){
+					$command = $xclipPath . ' -selection clipboard -t ' . $mime . ' -o > ' . $imgPath;
+					//图片地址不在$output中，而是在$imgPath里
+					$output = shell_exec($command);
+				}
 		}
+
 		if(is_file($imgPath)){
 			return $imgPath;
 		}
 		return '';
-    }
+	}
 }

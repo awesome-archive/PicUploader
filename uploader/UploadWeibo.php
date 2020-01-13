@@ -41,10 +41,9 @@ class UploadWeibo extends Common {
     {
         $ServerConfig = $params['config']['storageTypes'][$params['uploadServer']];
         
-        //上传url，请不要修改
-	    $this->uploadUrl = 'http://picupload.service.weibo.com/interface/pic_upload.php?mime=image%2Fjpeg&data=base64&url=0&markpos=1&logo=&nick=0&marks=1&app=miniblog&cb=http://weibo.com/aj/static/upimgback.html?_wv=5&callback=STK_ijax_'.time();
         $this->username = $ServerConfig['username'];
         $this->password = $ServerConfig['password'];
+
 		//获取上传用的cookie(微博图床非公共接口，需要模拟登录取得cookie后，再模拟网页上传)
 	    $this->cookie = $this->getCookie();
 	    $this->uploadServer = ucfirst($params['uploadServer']);
@@ -70,7 +69,9 @@ class UploadWeibo extends Common {
 		}
 		$cookieFile = self::COOKIE_CACHE_FILE;
 		if(is_file($cookieFile) && ((time() - filemtime($cookieFile)) < $expires) && file_get_contents($cookieFile)!=''){
-			return json_decode(file_get_contents($cookieFile), true);
+			$cookieArr = json_decode(file_get_contents($cookieFile), true);
+			// print_r($cookieArr);exit;
+			return $cookieArr;
 		}
 		
 		return $this->weiboLogin();
@@ -109,6 +110,12 @@ class UploadWeibo extends Common {
 			    'timeout'  => 10.0,
 		    ]);
 		    $response = $client->request('POST', '', [
+			    'curl' => [
+				    //如果使用了cacert.pem，貌似需要隔一段时间更新一次，所以还是不使用它了
+				    //CURLOPT_CAINFO => APP_PATH.'/static/cacert.pem',
+				    CURLOPT_SSL_VERIFYPEER => false,
+				    CURLOPT_SSL_VERIFYHOST => false,
+			    ],
 			    'form_params' => $loginData
 		    ]);
 		
@@ -124,9 +131,9 @@ class UploadWeibo extends Common {
 			    file_put_contents(self::COOKIE_CACHE_FILE, json_encode($cookie));
 		    }else{
 			    $string = $response->getBody()->getContents();
-			    throw new \Exception('Login faild: '.$string);
+			    throw new Exception('Login faild: '.$string);
 	        }
-	    }catch (\Exception $e){
+	    }catch (Exception $e){
 			//上传数错，记录错误日志(为了保证统一处理那里不出错，虽然报错，但这里还是返回对应格式)
 			$this->writeLog($e->getMessage()."\n", 'error_log');
 		}
@@ -161,13 +168,15 @@ class UploadWeibo extends Common {
 	}
 	
 	/**
-	 * Upload image to Weibo
+	 * Upload files to Weibo
+	 * 微博发布窗口：https://weibo.com/minipublish
 	 * @param $key  上传的文件名，由于微博无法自己指定key(因为微博图床并非官方真正提供接口，自然也就不可能自己命名上传的图片文件)，所以key在这里不使用。
 	 * @param $uploadFilePath
 	 * @param $originFilename
 	 *
-	 * @return String
+	 * @return array
 	 * @throws \GuzzleHttp\Exception\GuzzleException
+	 * @throws \ImagickException
 	 */
 	public function upload($key, $uploadFilePath, $originFilename){
 		try{
@@ -176,26 +185,33 @@ class UploadWeibo extends Common {
 				$useWatermark = static::$config['watermark']['useWatermark'] ?? 0;
 				$fileSizeHuman = (new Common())->getFileSizeHuman($uploadFilePath);
 				$errMsg = 'PicUploader限制上传到微博的最大图片为20M，你上传的文件'.($useWatermark ? '压缩后': '').'为'.$fileSizeHuman."！";
-				throw new \Exception($errMsg);
+				throw new Exception($errMsg);
 			}
 			if(strpos((new Common())->getMimeType($uploadFilePath), 'image')===false){
 				$errMsg = '微博图床只能上传图片，你上传的文件“'.$originFilename.'”不是图片，无法上传！';
-				throw new \Exception($errMsg);
+				throw new Exception($errMsg);
 			}
+			
+			$uploadUrl = 'http://picupload.service.weibo.com/interface/pic_upload.php?mime=image%2Fjpeg&data=base64&url=0&markpos=1&logo=&nick=0&marks=1&app=miniblog&cb=http://weibo.com/aj/static/upimgback.html?_wv=5&callback=STK_ijax_'.time();
 			
 			//实例化GuzzleHttp
 			$client = new Client([
-				'base_uri' => $this->uploadUrl,
+				'base_uri' => $uploadUrl,
 				'timeout'  => 10.0,
 			]);
 			$cookieJar = CookieJar::fromArray($this->cookie, 'picupload.service.weibo.com');
-			
 			$response = $client->request('POST', '', [
+				'curl' => [
+					//如果使用了cacert.pem，貌似隔一段时间更新一次，所以还是不使用它了
+					//CURLOPT_CAINFO => APP_PATH.'/static/cacert.pem',
+					CURLOPT_SSL_VERIFYPEER => false,
+					CURLOPT_SSL_VERIFYHOST => false,
+				],
 				'cookies' => $cookieJar,
 				'multipart' => [
 					[
-						'name' => 'pic1',
-						'contents' => fopen($uploadFilePath, 'r')
+						'name' => 'b64_data',
+						'contents' => base64_encode(file_get_contents($uploadFilePath))
 					],
 				]
 			]);
@@ -205,22 +221,119 @@ class UploadWeibo extends Common {
 			$match = [];
 			preg_match('/{.*}/i', $string, $match);
 			if(!isset($match[0])){
-				throw new \Exception($string);
+				throw new Exception($string);
 			}
 			
 			$arr = json_decode($match[0], true);
 			if(!isset($arr['data']['pics']['pic_1']['pid'])){
-				throw new \Exception($string);
+				throw new Exception($string);
 			}
 			
 			$link = $this->getUrl($arr['data']['pics']['pic_1']['pid']);
 			
-		}catch (\Exception $e){
+			$domain = '';
+			$pattern = '/https\:\/\/.*?\.sinaimg.cn\/large/';
+			if(preg_match($pattern, $link, $mathes)){
+				$domain = isset($mathes[0]) ? $mathes[0] : '';
+			}
+			if(!isset($domain)){
+				strpos($link, 'ws1.sinaimg.cn') && $domain = 'https://ws1.sinaimg.cn/large';
+				strpos($link, 'ws2.sinaimg.cn') && $domain = 'https://ws2.sinaimg.cn/large';
+				strpos($link, 'ws3.sinaimg.cn') && $domain = 'https://ws3.sinaimg.cn/large';
+				strpos($link, 'ws4.sinaimg.cn') && $domain = 'https://ws4.sinaimg.cn/large';
+			}
+			$key = str_replace($domain.'/', '', $link);
+			
+			$data = [
+				'code' => 0,
+				'msg' => 'success',
+				'key' => $key,
+				'domain' => $domain,
+			];
+		}catch (Exception $e){
 			//上传数错，记录错误日志(为了保证统一处理那里不出错，虽然报错，但这里还是返回对应格式)
-			$link = $e->getMessage();
-			$this->writeLog(date('Y-m-d H:i:s').'(' . $this->uploadServer . ') => '.$e->getMessage(), 'error_log');
+			$data = [
+				'code' => -1,
+				'msg' => $e->getMessage(),
+			];
+			$this->writeLog(date('Y-m-d H:i:s').'(' . $this->uploadServer . ') => '.$e->getMessage() . "\n\n", 'error_log');
 		}
 		
-		return $link;
+		return $data;
+	}
+	
+	
+	/*
+	 * 微相册：https://photo.weibo.com
+		图片内容：微相册禁止上传涉及色情、暴力、政治敏感问题等照片。一旦发现，将关闭该帐号的所有服务。
+		图片格式：微相册支持上传PNG，JPG，GIF，JPEG四种图片格式。
+		图片大小：微相册支持单张照片上传最大20MB，单次上传最多传120张。
+		相册容量：微相册支持单个用户自建专辑100个，单个自建专辑可储存1000张照片。
+	 */
+	
+	/**
+	 * 创建微博相册，无法创建成功，不知道少了啥
+	 * @throws \GuzzleHttp\Exception\GuzzleException
+	 */
+	private function createAlbum(){
+		$api = 'http://photo.weibo.com/albums/create';
+		$params = [
+			'property'=> "2",
+			'caption'=> 'PicUploader_' . date('Ymd'),
+			'description' => '由PicUploader创建于' . date('Ymd'),
+			'answer'=> "",
+			'question'=> "",
+			'album_id'=> "",
+		];
+		
+		//实例化GuzzleHttp
+		$client = new Client([
+			'base_uri' => $api,
+			'timeout'  => 10.0,
+		]);
+		$cookieJar = CookieJar::fromArray($this->cookie, 'sina.com.cn');
+		$response = $client->request('POST', '', [
+			'curl' => [
+				//如果使用了cacert.pem，貌似隔一段时间更新一次，所以还是不使用它了
+				//CURLOPT_CAINFO => APP_PATH.'/static/cacert.pem',
+				CURLOPT_SSL_VERIFYPEER => false,
+				CURLOPT_SSL_VERIFYHOST => false,
+			],
+			'cookies' => $cookieJar,
+			'form_params' => $params,
+		]);
+		
+		$string = $response->getBody()->getContents();
+		var_export($string);exit;
+	}
+	
+	private function attachToAlbum($pid, $albumId){
+		!$albumId && $albumId = 4421240252137641;
+		$params = [
+			'pid' => $pid,
+			'album_id' => $albumId,
+			'isOrig' => 1,
+			'upload_type' => 1,
+		];
+		
+		$api = 'http://photo.weibo.com/upload/photo';
+		//实例化GuzzleHttp
+		$client = new Client([
+			'base_uri' => $api,
+			'timeout'  => 10.0,
+		]);
+		$cookieJar = CookieJar::fromArray($this->cookie, 'sina.com.cn');
+		$response = $client->request('POST', '', [
+			'curl' => [
+				//如果使用了cacert.pem，貌似隔一段时间更新一次，所以还是不使用它了
+				//CURLOPT_CAINFO => APP_PATH.'/static/cacert.pem',
+				CURLOPT_SSL_VERIFYPEER => false,
+				CURLOPT_SSL_VERIFYHOST => false,
+			],
+			'cookies' => $cookieJar,
+			'form_params' => $params,
+		]);
+		
+		$string = $response->getBody()->getContents();
 	}
 }

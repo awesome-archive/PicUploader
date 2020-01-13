@@ -8,13 +8,15 @@
 
 namespace uploader;
 
+use Exception;
+
 class UploadUcloud extends Upload{
 
     public $publicKey;
     public $privateKey;
     public $proxySuffix;
 	public $bucket;
-	public $endPoint;
+	public $endpoint;
 	public $domain;
 	public $directory;
 	//上传目标服务器名称
@@ -32,14 +34,18 @@ class UploadUcloud extends Upload{
      */
     public function __construct($params)
     {
-	    $ServerConfig = $params['config']['storageTypes'][$params['uploadServer']];;
+	    $ServerConfig = $params['config']['storageTypes'][$params['uploadServer']];
 	    
         $this->publicKey = $ServerConfig['publicKey'];
         $this->privateKey = $ServerConfig['privateKey'];
         $this->proxySuffix = $ServerConfig['proxySuffix'];
         $this->bucket = $ServerConfig['bucket'];
-        $this->endPoint = $ServerConfig['endPoint'];
+        $this->endpoint = $ServerConfig['endpoint'];
 	    $this->domain = $ServerConfig['domain'] ?? '';
+	    // http://markdown-blog.ufile.ucloud.com.cn
+	    $defaultDomain = 'http://' . $this->bucket . '.' . $this->endpoint;
+	    !$this->domain && $this->domain = $defaultDomain;
+	    
 	    if(!isset($ServerConfig['directory']) || ($ServerConfig['directory']=='' && $ServerConfig['directory']!==false)){
 		    //如果没有设置，使用默认的按年/月/日方式使用目录
 		    $this->directory = date('Y/m/d');
@@ -54,7 +60,7 @@ class UploadUcloud extends Upload{
     }
 	
 	/**
-	 * Upload images to Ucloud
+	 * Upload files to Ucloud
 	 * @param $key
 	 * @param $uploadFilePath
 	 *
@@ -69,35 +75,40 @@ class UploadUcloud extends Upload{
 			$UCLOUD_PROXY_SUFFIX = $this->proxySuffix;
 			
 			if($this->directory){
-				$key = $this->directory. '/' . $key;
+				$key = $this->directory . '/' . $key;
 			}
 			//初始化分片上传,获取本地上传的uploadId和分片大小
 			list($data, $err) = UCloud_MInit($this->bucket, $key);
 			if ($err) {
-				throw new \Exception('UCloud_MFinish: '.var_export($err, true));
+				throw new Exception('UCloud_MFinish: '.var_export($err, true));
 			}
 			
 			//数据上传
 			list($etagList, $err) = UCloud_MUpload($this->bucket, $key, $uploadFilePath, $data['UploadId'], $data['BlkSize']);
 			if ($err) {
-				throw new \Exception('UCloud_MFinish: '.var_export($err, true));
+				throw new Exception('UCloud_MFinish: '.var_export($err, true));
 			}
 			
 			//上传p完成
 			list($data, $err) = UCloud_MFinish($this->bucket, $key, $data['UploadId'], $etagList);
 			if ($err) {
-				throw new \Exception('UCloud_MFinish: '.var_export($err, true));
+				throw new Exception('UCloud_MFinish: '.var_export($err, true));
 			}
 			
-			if(!$this->domain){
-				$this->domain = 'http://'.$this->bucket.'.'.ltrim($this->endPoint, '.');
-			}
-			$link = $this->domain.'/'.$data['Key'];
-		}catch (\Exception $e){
+			$data = [
+				'code' => 0,
+				'msg' => 'success',
+				'key' => $key,
+				'domain' => $this->domain,
+			];
+		}catch (Exception $e){
 			//上传出错，记录错误日志(为了保证统一处理那里不出错，虽然报错，但这里还是返回对应格式)
-			$link = $e->getMessage();
-			$this->writeLog(date('Y-m-d H:i:s').'(' . $this->uploadServer . ') => '.$e->getMessage(), 'error_log');
+			$data = [
+				'code' => -1,
+				'msg' => $e->getMessage(),
+			];
+			$this->writeLog(date('Y-m-d H:i:s').'(' . $this->uploadServer . ') => '.$e->getMessage() . "\n\n", 'error_log');
 		}
-		return $link;
+		return $data;
     }
 }

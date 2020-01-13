@@ -17,7 +17,7 @@
 				'SK' => 'Uo*********************************lkEy',
 				//七牛云对象存储空间名
 				'bucket' => 'markdown',
-				//七牛云外链域名（域名要自己绑定，因为默认域名30天后会被回收）
+				//必填，七牛云外链域名（域名要自己绑定，因为默认域名30天后会被回收）
 				'domain' => 'http://pe5scgdex.bkt.clouddn.com',
 				//七牛优化参数，直接加在链接后面，但是不会优化原图，只会优化输出的图片，如果不需要可以不配置该项（即注释掉）
 				'optimize' => '?imageMogr2/thumbnail/800x/strip/quality/80',
@@ -46,9 +46,12 @@
 				'name' => '网易云',
 				'accessKey' => '4bd5*********************************7b',
 				'accessSecret' => '465*****************************82db',
+				//区域，目前只有“华东1”，貌似文档也没说明，我是按s3的格式“us-west-1”这样猜的，华就是cn，东就是east，猜的“cn-east-1”还真对了
+				//以后如果有华南1估计就是“cn-south-1”，以后有华北就是“cn-north-1”等。
+				'region' => 'cn-east-1',
 				'bucket' => 'markdown-bucket',
-				//endPoint不是域名，域名是 bucket.'.'.endPoint
-				'endPoint' => 'nos-eastchina1.126.net',
+				//endpoint不是域名，域名是 bucket.'.'.endpoint
+				'endpoint' => 'http://nos-eastchina1.126.net',
 				//如果不填domain，则自动拼装网易云给的域名
 				'domain' => '',
 				//存储目录，可使用年月日点位符，如 {Y}/{m}/{d}，真正被解析出来的时候会被替换成当前的年月日(如 2019/05/10)
@@ -84,6 +87,7 @@
 				'directory' => '',
 			],
 			//Aliyun Cloud
+			//由于未知原因，阿里云与百度云目前开启图片压缩和水印将导致上传失败，排查出问题会马上更新
 			'aliyun' => [
 				'name' => '阿里云',
 				'accessKey' => 'cD********aL',
@@ -110,22 +114,32 @@
 				'directory' => '',
 			],
 			
-			//https://sm.ms
+			//https://sm.ms, 新版api每人5GB免费空间，收费的截止到2019-08-25还没上线，但已经在开发中，原api在新api完善后，将会下线
+			//也就是说后面使用sm.ms就必须注册了
 			'smms' => [
 				'name' => 'sm.ms',
+				// 有两种值可填，v1或v2，使用v1时，token不需要填，使用v2时，token要填(v2可以sm.ms后台看到自己上传的图片)
+				'version' => 'v1',
+				//sm.ms新版api需要token，请注册后，在Dashboard中生成Api token并填写到这里
+				'token' => 'zMY50m***********fxXHly',
 				//代理地址，如果使用shadowsocks做代理，ip填http://127.0.0.1（或直接填127.0.0.1）即可，
-				//比如：'proxy' => 'http://127.0.0.1:1087'，端口从『偏好设置→HTTP→监听端口』找，留空表示不使用代理
+				//端口从『偏好设置→HTTP→监听端口』找，留空或注释掉表示不使用代理
+				// 'proxy' => 'http://127.0.0.1:1087',
 				'proxy' => '',
 				//无法自定义域名和key名，只能直接用它返回的地址（原因是无账号系统，自己定义的key无法保证全局唯一）
+				//反向代理域名(如果需要的话)
+				'domain' => 'http://img.xiebruce.top',
 			],
 			
 			//imgur
 			'imgur' => [
 				'name' => 'Imgur',
 				'clientId' => 'ab************cdf',
+				//自定义反向代理域名
+				'domain' => '',
 				//代理地址，如果使用shadowsocks做代理，ip填http://127.0.0.1（或直接填127.0.0.1）即可，
 				//比如：'proxy' => 'http://127.0.0.1:1087'，端口从『偏好设置→HTTP→监听端口』找，留空表示不使用代理
-				'proxy' => '',
+				'proxy' => ''
 				//无法自定义域名和key名，只能直接用它返回的地址（原因是无账号系统，自己定义的key无法保证全局唯一）
 			],
 			
@@ -140,9 +154,9 @@
 				//比如我的域名叫：markdown-blog.cn-gd.ufileos.com，那么“markdown-blog”是自己填的，“.cn-gd.ufileos.com”是自动的，因为我选的是广东，所以“cn-”后面是“gd”，如果我选的是北京，那么“cn-”后面就是“bj”
 				'proxySuffix' => '.cn-**.ufileos.com',
 				'bucket' => 'mar******log',
-				//endPoint，cdn加速域名是bucket名+endPoint组成，Ucloud中没有endPoint的说法，
-				//但其实这就是endPoint，这个值请自己复制cdn加速域名除去bucket名部分到这里（不包含英文句点）
-				'endPoint' => 'ufile.ucloud.com.cn',
+				//endpoint，cdn加速域名是bucket名+endpoint组成，Ucloud中没有endpoint的说法，
+				//但其实这就是endpoint，这个值请自己复制cdn加速域名除去bucket名部分到这里（不包含英文句点）
+				'endpoint' => 'ufile.ucloud.com.cn',
 				//如果不写，则自动拼装Ucloud给的域名
 				'domain' => '',
 				//存储目录，可使用年月日点位符，如 {Y}/{m}/{d}，真正被解析出来的时候会被替换成当前的年月日(如 2019/05/10)
@@ -239,6 +253,9 @@
 			],
 			
 			//Weibo(上传图片到微博并不会自动发一条微博，请放心使用)
+			// 2019.09.01更新：微博目前不能上传了，原来用的接口已经用不了，有新方法再更新吧
+			// 2019.09.10更新：微博上传恢复，能正常使用
+			// 由于微博的图片域名不稳定(目前知道有https://ws1.sinaimg.cn和https://ws4.sinaimg.cn两个)，所以无法做反代
 			'weibo' => [
 				'name' => '微博',
 				//微博登录用户名(或邮箱)
@@ -280,6 +297,7 @@
 			],
 			
 			//https://cloudinary.com
+			//如果要设置反代，请反代这个域名：https://res.cloudinary.com/用户名/image/upload/v1（用户名即cloudName的值）
 			'cloudinary' => [
 				'name' => 'Cloudinary',
 				'cloudName' => 'bruce',
@@ -341,14 +359,53 @@
 				//使用代理，如：http://127.0.0.1:1087
 				'proxy' => '',
 			],
+			
+			// 开源自建对象存储服务器Minio：https://github.com/minio/minio
+			'minio' => [
+				'name' => 'Minio',
+				'AccessKeyId' => '0CQ2*******2A9',
+				'AccessKeySecret' => 'ucya0Ot+**********1fnjXU6I4',
+				//如果你的minio服务器未设置region，那就留空
+				'region' => '',
+				'bucket' => 'ma****wn',
+				'endpoint' => 'http://*********',
+				//自定义域名，如果为空，则默认使用endpoint作为域名
+				'domain' => '',
+				//自定义目录格式：2019/03/31
+				'directory' => '/{Y}/{m}/{d}',
+				//使用代理，格式：http://127.0.0.1:1087
+				'proxy' => '',
+			],
+			
+			//Dropbox网盘： https://www.dropbox.com/home
+			//由于它是网盘，需要先上传再创建分享链接，所以每一次上传需要请求两次api，并且国内又要用代理，所以速度会慢一点
+			//反代域名：https://dl.dropboxusercontent.com/s (最后一个s是有的，没有敲错了)
+			'dropbox' => [
+				'name' => 'DropBox',
+				'appKey' => '5k********fb',
+				'appSecret' => 'kzy********8v9',
+				//使用代理(国内必须使用代理)，如：http://127.0.0.1:1087
+				'proxy' => 'http://127.0.0.1:1087',
+				//自定义目录格式：2019/03/31
+				'directory' => '/{Y}/{m}/{d}',
+				//自定义域名
+				'domain' => '',
+			],
 		],
 		
-		// 即将舍弃，图片优化宽度（建议填1000），值为0或注释掉表示不优化，由于比较大的图片压缩为固定宽度容易导致图片很模糊，因此这种压缩为固定宽度的方式不科学，改为使用百分比，如果使用了“resizeOption”选项，该参数不再使用。
-		'imgWidth' => 1500,
+		/*
+		 * 文件名格式
+		 * 替换变量：{origin}原始文件名, {Y}当前年, {m}当前月, {d}当前日, {H}当前小时, {i}当前分, {s}当前秒, {timestamp}当前时间戳, {random:8}随机字符串(8为长度，为避免文件覆盖，至少8位，设置8以下的数值会自动使用8位，最多100位)，留空或未使用任何替换变量则默认使用32位md5加密文件名，注意该设置只对能自定义文件名的存储引擎起效果，并且这里最好不要使用“/”作为分隔符，因为对象存储会把“/”分隔的文件名当成目录。
+例：{Y}-{m}-{d}-{H}-{i}-{s}-{random:16}，产生的文件名格式为：2019-07-26-15-16-55-mQVAiII4Ff8PNXfb.jpg
+		 */
+		'fileNameFormat' => '',
+		
+		// 反向代理域名(使用方式请查看：https://www.xiebruce.top/644.html)
+		'reverseProxyDomain' => 'https://img.xiebruce.top',
 		
 		// 调整图片大小，以下widthGreaterThan、heightGreaterThan、sizeBiggerThan三个条件，只要有一个满足，图片即会按percentage指定的百分比压缩（只对jpg和png有效，gif暂时无法压缩）
 		'resizeOptions' => [
-			// 0.65表示把原图等比缩小为原来的65%，percentage取值为0-100之间，可使用两位小数，当percentage为0和100时，不进行压缩。
+			// 65表示把原图等比缩小为原来的65%(所以数字越小压的越厉害)，percentage取值为0-100之间，可使用两位小数，当percentage为0、100及大于100时，不进行压缩。
 			'percentage' => '65',
 			
 			// 当宽度超过1000px时压缩
